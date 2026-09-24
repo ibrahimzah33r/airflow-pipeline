@@ -1,0 +1,173 @@
+x-airflow-common: &airflow-common
+  image: apache/airflow:3.3.2-python3.12
+
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+      postgresql+psycopg2://${AIRFLOW_POSTGRES_USER}:${AIRFLOW_POSTGRES_PASSWORD}@airflow-db:5432/${AIRFLOW_POSTGRES_DB}
+
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "admin:admin"
+
+  user: "${AIRFLOW_UID}:0"
+
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - ./etl:/opt/airflow/etl
+
+  depends_on:
+    airflow-db:
+      condition: service_healthy
+
+services:
+  # --------------------------------------------------
+  # OUR DATA WAREHOUSE
+  # --------------------------------------------------
+
+  warehouse-db:
+    image: postgres:16
+    container_name: airflow-warehouse-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${WAREHOUSE_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${WAREHOUSE_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${WAREHOUSE_POSTGRES_DB}
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - warehouse_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${WAREHOUSE_POSTGRES_USER} -d ${WAREHOUSE_POSTGRES_DB}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------
+  # RAW OBJECT STORAGE
+  # --------------------------------------------------
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: airflow-minio
+    restart: unless-stopped
+
+    command: server /data --console-address ":9001"
+
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+    volumes:
+      - minio_data:/data
+
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------
+  # AIRFLOW'S OWN DATABASE
+  # --------------------------------------------------
+
+  airflow-db:
+    image: postgres:16
+    container_name: airflow-metadata-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${AIRFLOW_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${AIRFLOW_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${AIRFLOW_POSTGRES_DB}
+
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${AIRFLOW_POSTGRES_USER} -d ${AIRFLOW_POSTGRES_DB}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------
+  # INITIALIZE AIRFLOW DATABASE
+  # --------------------------------------------------
+
+  airflow-init:
+    <<: *airflow-common
+
+    container_name: airflow-init
+
+    command:
+      - bash
+      - -c
+      - airflow db migrate
+
+    restart: "no"
+
+  # --------------------------------------------------
+  # AIRFLOW API / UI
+  # --------------------------------------------------
+
+  airflow-api-server:
+    <<: *airflow-common
+
+    container_name: airflow-api-server
+
+    command: api-server
+
+    ports:
+      - "8080:8080"
+
+    restart: unless-stopped
+
+  # --------------------------------------------------
+  # AIRFLOW SCHEDULER
+  # --------------------------------------------------
+
+  airflow-scheduler:
+    <<: *airflow-common
+
+    container_name: airflow-scheduler
+
+    command: scheduler
+
+    restart: unless-stopped
+
+  # --------------------------------------------------
+  # AIRFLOW DAG PROCESSOR
+  # --------------------------------------------------
+
+  airflow-dag-processor:
+    <<: *airflow-common
+
+    container_name: airflow-dag-processor
+
+    command: dag-processor
+
+    restart: unless-stopped
+
+volumes:
+  warehouse_postgres_data:
+  airflow_postgres_data:
+  minio_data:

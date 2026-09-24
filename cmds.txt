@@ -1,0 +1,14 @@
+docker compose pull airflow-api-server
+docker compose pull airflow-db
+docker compose up airflow-init
+
+docker compose up -d \
+  warehouse-db \
+  minio \
+  airflow-db \
+  airflow-api-server \
+  airflow-scheduler \
+  airflow-dag-processor
+
+docker exec airflow-api-server \
+  cat /opt/airflow/simple_auth_manager_passwords.json.generated
