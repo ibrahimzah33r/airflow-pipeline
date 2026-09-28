@@ -10,6 +10,7 @@ from etl.transformation.market_transformer import (
     get_observed_at_from_object_name,
     transform_market_data,
 )
+from datetime import timedelta
 
 
 logger = logging.getLogger("airflow.task")
@@ -17,14 +18,19 @@ logger = logging.getLogger("airflow.task")
 
 @dag(
     dag_id="market_ingestion",
-    schedule=None,
+    schedule="@hourly",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     catchup=False,
+    max_active_runs=1,
     tags=["market", "ingestion"],
 )
 def market_ingestion_dag():
 
-    @task
+    
+    @task(
+    retries=3,
+    retry_delay=timedelta(minutes=2),
+    )
     def ingest() -> str:
         object_name = ingest_market_data()
 
@@ -35,7 +41,10 @@ def market_ingestion_dag():
 
         return object_name
 
-    @task
+    @task(
+        retries=2,
+        retry_delay=timedelta(minutes=1),
+    )
     def transform(
         object_name: str,
     ) -> list[dict]:
@@ -57,7 +66,10 @@ def market_ingestion_dag():
 
         return transformed
 
-    @task
+    @task(
+        retries=3,
+        retry_delay=timedelta(minutes=2),
+    )
     def load(
         records: list[dict],
     ) -> int:
