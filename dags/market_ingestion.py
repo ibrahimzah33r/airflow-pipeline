@@ -12,6 +12,11 @@ from etl.transformation.market_transformer import (
 )
 from datetime import timedelta
 from etl.transformation.data_quality import validate_market_records
+from etl.monitoring.callbacks import (
+    dag_failure_callback,
+    dag_success_callback,
+    task_retry_callback,
+)
 
 logger = logging.getLogger("airflow.task")
 
@@ -19,9 +24,16 @@ logger = logging.getLogger("airflow.task")
 @dag(
     dag_id="market_ingestion",
     schedule="@hourly",
-    start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
+    start_date=pendulum.datetime(
+        2026,
+        1,
+        1,
+        tz="UTC",
+    ),
     catchup=False,
     max_active_runs=1,
+    on_success_callback=dag_success_callback,
+    on_failure_callback=dag_failure_callback,
     tags=["market", "ingestion"],
 )
 def market_ingestion_dag():
@@ -30,6 +42,7 @@ def market_ingestion_dag():
     @task(
     retries=3,
     retry_delay=timedelta(minutes=2),
+    on_retry_callback=task_retry_callback,
     )
     def ingest() -> str:
         object_name = ingest_market_data()
@@ -44,6 +57,7 @@ def market_ingestion_dag():
     @task(
         retries=2,
         retry_delay=timedelta(minutes=1),
+        on_retry_callback=task_retry_callback,
     )
     def transform(
         object_name: str,
@@ -69,6 +83,7 @@ def market_ingestion_dag():
     @task(
     retries=1,
     retry_delay=timedelta(minutes=1),
+    on_retry_callback=task_retry_callback,
     )
     def validate(
         records: list[dict],
@@ -87,6 +102,7 @@ def market_ingestion_dag():
     @task(
         retries=3,
         retry_delay=timedelta(minutes=2),
+        on_retry_callback=task_retry_callback,
     )
     def load(
         records: list[dict],
