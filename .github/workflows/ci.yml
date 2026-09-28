@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+
+        env:
+          POSTGRES_USER: pipeline
+          POSTGRES_PASSWORD: pipeline_dev_password
+          POSTGRES_DB: warehouse_db
+
+        ports:
+          - 5432:5432
+
+        options: >-
+          --health-cmd "pg_isready -U pipeline -d warehouse_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      WAREHOUSE_HOST: localhost
+      WAREHOUSE_PORT: 5432
+      WAREHOUSE_POSTGRES_USER: pipeline
+      WAREHOUSE_POSTGRES_PASSWORD: pipeline_dev_password
+      WAREHOUSE_POSTGRES_DB: warehouse_db
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Create warehouse schema
+        env:
+          PGPASSWORD: pipeline_dev_password
+        run: |
+          psql \
+            -h localhost \
+            -U pipeline \
+            -d warehouse_db \
+            -f sql/schema.sql
+
+      - name: Run unit tests
+        run: ./scripts/test-unit.sh
+
+      - name: Run integration tests
+        run: ./scripts/test-integration.sh

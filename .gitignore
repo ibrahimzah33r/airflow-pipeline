@@ -25,3 +25,12 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+*.pyc
+.pytest_cache/
+logs/*
+!logs/.gitkeep
+
+# Python tooling
+.mypy_cache/
+.ruff_cache/
