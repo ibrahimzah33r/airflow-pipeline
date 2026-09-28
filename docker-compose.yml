@@ -1,5 +1,9 @@
 x-airflow-common: &airflow-common
-  image: apache/airflow:3.3.2-python3.12
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+  image: airflow-pipeline:local
 
   environment:
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -10,6 +14,17 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
 
     AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "admin:admin"
+    MINIO_ENDPOINT: minio:9000
+    MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+    MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    MINIO_SECURE: "false"
+    MINIO_RAW_BUCKET: ${MINIO_RAW_BUCKET}
+
+    KRAKEN_API_URL: ${KRAKEN_API_URL}
+    KRAKEN_PAIRS: ${KRAKEN_PAIRS}
+    PYTHONPATH: /opt/airflow
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET}
 
   user: "${AIRFLOW_UID}:0"
 
@@ -21,6 +36,9 @@ x-airflow-common: &airflow-common
 
   depends_on:
     airflow-db:
+      condition: service_healthy
+
+    minio:
       condition: service_healthy
 
 services:

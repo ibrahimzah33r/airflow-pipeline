@@ -12,3 +12,7 @@ docker compose up -d \
 
 docker exec airflow-api-server \
   cat /opt/airflow/simple_auth_manager_passwords.json.generated
+
+docker exec airflow-api-server \
+  cat /opt/airflow/simple_auth_manager_passwords.json.generated
+grep -E "MINIO_ROOT_USER|MINIO_ROOT_PASSWORD" .env
