@@ -69,3 +69,22 @@ def store_raw_json(
     )
 
     return object_name
+
+def read_json_object(object_name: str) -> Any:
+    client = get_minio_client()
+
+    bucket_name = os.getenv(
+        "MINIO_RAW_BUCKET",
+        "raw-market-data",
+    )
+
+    response = client.get_object(
+        bucket_name=bucket_name,
+        object_name=object_name,
+    )
+
+    try:
+        return json.loads(response.read().decode("utf-8"))
+    finally:
+        response.close()
+        response.release_conn()
