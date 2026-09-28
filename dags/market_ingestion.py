@@ -11,7 +11,7 @@ from etl.transformation.market_transformer import (
     transform_market_data,
 )
 from datetime import timedelta
-
+from etl.transformation.data_quality import validate_market_records
 
 logger = logging.getLogger("airflow.task")
 
@@ -67,6 +67,24 @@ def market_ingestion_dag():
         return transformed
 
     @task(
+    retries=1,
+    retry_delay=timedelta(minutes=1),
+    )
+    def validate(
+        records: list[dict],
+    ) -> list[dict]:
+        validated_records = validate_market_records(
+            records
+        )
+
+        logger.info(
+            "Validated %s market records",
+            len(validated_records),
+        )
+
+        return validated_records
+
+    @task(
         retries=3,
         retry_delay=timedelta(minutes=2),
     )
@@ -88,7 +106,11 @@ def market_ingestion_dag():
         raw_object_name
     )
 
-    load(transformed_records)
+    validated_records = validate(
+        transformed_records
+    )
+
+    load(validated_records)
 
 
 market_ingestion_dag()
